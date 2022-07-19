@@ -5,11 +5,15 @@
 
 using std::cout;
 using std::endl;
+
+
 void SpacialHorizon::init(ros::NodeHandle &nh)
 {   
     have_goal_ = false;
     have_odom_ = false;
 
+    
+    ROS_ERROR("[SpacialHorizon] Inizialiting..");
     /*  fsm param  */
     node_=nh;
     node_.param("fsm/goal_tolerance",    goal_tolerance_, 0.5);
@@ -23,14 +27,22 @@ void SpacialHorizon::init(ros::NodeHandle &nh)
 
     /* ros communication with public node */
     ros::NodeHandle public_nh;  // sim1/goal
+
+    // forse spacial horizon fa la subscribe ma non riesce a leggere il messaggio in tempo perchè il supervisor pubblica troppo presto su /goal, la callback infatti non parte.
+    // falso -> usiamo Latch = true quando pubblichiamo il messaggio, ma perchè la callback non parte?
     goal_sub_ = public_nh.subscribe("goal", 1, &SpacialHorizon::goalCallback,this);
 
-    public_nh.getParam("/real", is_real);
-    if(is_real){
+    /* public_nh.getParam("/real", is_real);
+     if(is_real){
+        ROS_ERROR("[SpacialHorizon] Using AMCL");
         amcl_pose_sub_ = public_nh.subscribe("amcl_pose", 1, &SpacialHorizon::amcl_poseCallback, this);
-    }else{
+     } else{
+        ROS_ERROR("[SpacialHorizon] Using odom");
         odom_sub_ = public_nh.subscribe("odom", 1, &SpacialHorizon::odomCallback, this);
-    }
+    } */
+
+    ROS_ERROR("[SpacialHorizon] Using AMCL");
+    amcl_pose_sub_ = public_nh.subscribe("amcl_pose", 1, &SpacialHorizon::amcl_poseCallback, this);
     
     initialPose_sub_ = public_nh.subscribe("initialpose", 0, &SpacialHorizon::handle_initial_pose, this);
 
@@ -41,6 +53,13 @@ void SpacialHorizon::init(ros::NodeHandle &nh)
     vis_global_path_pub_ = public_nh.advertise<nav_msgs::Path>("vis_global_path", 10, true);
     vis_goal_pub_	 = public_nh.advertise<visualization_msgs::Marker>("vis_goal", 20);
     vis_subgoal_drl_pub_ = public_nh.advertise<visualization_msgs::Marker>("vis_subgoal", 20);
+
+
+    // dichiaro timer "execute_goal_timer" 10Hz + callback --> sostituisce il while
+    // if goal received + stato = wait -> timerCallback
+    // aggiungi variabile stato
+    // break = fermare il timer (cerca comando) shutdown o qualcosa di simile
+    execute_goal_timer = public_nh.createTimer(ros::Duration(0.1), &SpacialHorizon::timerCallback, this);  // 0.1 è il periodo, quindi 1/10 cioè f = 10Hz
 }
 
 void SpacialHorizon::handle_initial_pose(const geometry_msgs::PoseWithCovarianceStampedPtr& msg) {
@@ -49,7 +68,9 @@ void SpacialHorizon::handle_initial_pose(const geometry_msgs::PoseWithCovariance
 
 void SpacialHorizon::amcl_poseCallback(const geometry_msgs::PoseWithCovarianceStampedPtr& msg){
     odom_pos_ = Eigen::Vector2d(msg->pose.pose.position.x, msg->pose.pose.position.y);
-    have_odom_ = true;
+    //have_odom_ = true;
+    state = "AMCL_RECEIVED";
+    //ROS_ERROR("[SpacialHorizon] AMCL callback set have_odom = true");
 }
 
 void SpacialHorizon::odomCallback(const nav_msgs::OdometryConstPtr& msg){
@@ -68,22 +89,57 @@ void SpacialHorizon::odomCallback(const nav_msgs::OdometryConstPtr& msg){
     have_odom_ = true;
 }
 
-void SpacialHorizon::goalCallback(const geometry_msgs::PoseStampedPtr& msg){
-    if(have_odom_==false) return;
+/* void SpacialHorizon::goalCallback(const geometry_msgs::PoseStampedPtr& msg){        // salva messaggio e stato = sto iniziando
+    if(have_odom_==false) {
+        ROS_ERROR("[SpacialHorizon] CALLBACK RETURNED because have_odom == false");
+        return;
+    }
+    
     ros::param::set("/bool_goal_reached", false);
     // end pt
-    end_pos_=Eigen::Vector2d(msg->pose.position.x,msg->pose.position.y);
+    end_pos_=Eigen::Vector2d(msg->pose.position.x,msg->pose.position.y);        //salva questo 
     end_vel_=Eigen::Vector2d::Zero();
 
     have_goal_=true;
     std::cout << "[SpacialHorizon] Goal set!" << std::endl;
-
+    ROS_ERROR("[SpacialHorizon] CALLBACK CALLED");
     getGlobalPath_MoveBase();
 
     // vis goal
     std::vector<Eigen::Vector2d> point_set;
     point_set.push_back(end_pos_);
     visualizePoints(point_set,0.5,Eigen::Vector4d(1, 1, 1, 1.0),vis_goal_pub_);
+
+} */
+
+void SpacialHorizon::goalCallback(const geometry_msgs::PoseStampedPtr& msg){        // salva messaggio e stato = sto iniziando
+    ros::param::set("/bool_goal_reached", false);
+    // end pt
+    end_pos_=Eigen::Vector2d(msg->pose.position.x,msg->pose.position.y);        //salva questo 
+    end_vel_=Eigen::Vector2d::Zero();
+    have_goal_=true; 
+    std::cout << "[SpacialHorizon] Goal set!" << std::endl;   
+    //ROS_ERROR("[SpacialHorizon] GOAL CALLBACK CALLED");      
+}
+
+void SpacialHorizon::timerCallback(const ros::TimerEvent& event) {
+    if (state == "AMCL_RECEIVED" && have_goal_) {    // Se entrambe le callback sono state chiamate (amcl + goal) allora crea globalPlan
+        ROS_ERROR("[SpacialHorizon] AMCL AND GOAL RECEIVED");
+        state = "READY";
+        getGlobalPath_MoveBase();
+
+        // vis goal
+        std::vector<Eigen::Vector2d> point_set;
+        point_set.push_back(end_pos_);
+        visualizePoints(point_set,0.5,Eigen::Vector4d(1, 1, 1, 1.0),vis_goal_pub_);
+        execute_goal_timer.stop();
+    }
+    else if (state == "AMCL_RECEIVED" && !have_goal_){
+        ROS_ERROR("[SpacialHorizon] AMCL RECEIVED, GOAL NOT YET");
+    }
+    else if (state != "AMCL_RECEIVED" && have_goal_) {
+        ROS_ERROR("[SpacialHorizon] GOAL RECEIVED, AMCL NOT YET");
+    }
 
 }
 
@@ -171,6 +227,7 @@ void SpacialHorizon::getGlobalPath_MoveBase(){
 	/* get global path from move_base */
 	ros::NodeHandle nh;
 	std::string service_name = "/move_base/NavfnROS/make_plan";
+    ROS_ERROR("[SpacialHorizon] Ask movebase for globalplan");
 	while (!ros::service::waitForService(service_name, ros::Duration(3.0))) {
 		ROS_INFO("[SpacialHorizon - GET_PATH] Waiting for service /move_base/NavfnROS/make_plan to become available");
 	}
@@ -215,6 +272,7 @@ void SpacialHorizon::callPlanningService(ros::ServiceClient &serviceClient, nav_
 		if (!srv.response.plan.poses.empty()) {
 			visualizeGlobalPath(vis_global_path_pub_);
             globalPlan_DRL_pub_.publish(srv.response.plan);
+            ROS_ERROR("[GLOBAL PLAN PUBLISHED]");
 		}else{
 			ROS_WARN("[SpacialHorizon - GET_PATH] Got empty plan");
 		}
@@ -303,4 +361,5 @@ int main(int argc, char** argv)
     
     ros::spin();
 }
+
 

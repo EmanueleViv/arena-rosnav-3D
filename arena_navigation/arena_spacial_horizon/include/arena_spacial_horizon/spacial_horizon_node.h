@@ -6,6 +6,7 @@
 #include <ros/ros.h>
 #include <algorithm>
 #include <vector>
+#include <string>
 
 
 #include <nav_msgs/Odometry.h>
@@ -27,6 +28,7 @@ private:
     //enum FSM_EXEC_STATE {INIT, WAIT_GOAL};
     /* planning data */
     bool have_goal_, have_odom_;
+    std::string state;
 
     geometry_msgs::PoseStamped ps_odom;
 
@@ -62,12 +64,14 @@ private:
     /* ROS utils */
     ros::NodeHandle node_;
     ros::Timer subgoal_DRL_timer_;
+    ros::Timer execute_goal_timer;
     
     /* ros related callback*/
     void amcl_poseCallback(const geometry_msgs::PoseWithCovarianceStampedPtr& msg);
     void odomCallback(const nav_msgs::OdometryConstPtr& msg);
     void goalCallback(const geometry_msgs::PoseStampedPtr& msg);
     void handle_initial_pose(const geometry_msgs::PoseWithCovarianceStampedPtr& msg);
+    void timerCallback(const ros::TimerEvent& event);
 
     bool getSubgoalSpacialHorizon(Eigen::Vector2d &subgoal);
     void updateSubgoalDRLCallback(const ros::TimerEvent &e);
@@ -92,5 +96,6 @@ public:
 };
 
 #endif
+
 
 
