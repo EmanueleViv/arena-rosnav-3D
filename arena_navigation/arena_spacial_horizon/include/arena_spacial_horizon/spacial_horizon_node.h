@@ -27,7 +27,7 @@ class SpacialHorizon{
 private:
     //enum FSM_EXEC_STATE {INIT, WAIT_GOAL};
     /* planning data */
-    bool have_goal_, have_odom_;
+    bool have_goal_, have_odom_, goal;
     std::string state;
 
     geometry_msgs::PoseStamped ps_odom;

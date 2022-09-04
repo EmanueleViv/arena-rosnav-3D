@@ -70,7 +70,7 @@ void SpacialHorizon::amcl_poseCallback(const geometry_msgs::PoseWithCovarianceSt
     odom_pos_ = Eigen::Vector2d(msg->pose.pose.position.x, msg->pose.pose.position.y);
     //have_odom_ = true;
     state = "AMCL_RECEIVED";
-    //ROS_ERROR("[SpacialHorizon] AMCL callback set have_odom = true");
+    //ROS_ERROR("[SpacialHorizon] AMCL received");
 }
 
 void SpacialHorizon::odomCallback(const nav_msgs::OdometryConstPtr& msg){
@@ -117,28 +117,30 @@ void SpacialHorizon::goalCallback(const geometry_msgs::PoseStampedPtr& msg){    
     // end pt
     end_pos_=Eigen::Vector2d(msg->pose.position.x,msg->pose.position.y);        //salva questo 
     end_vel_=Eigen::Vector2d::Zero();
-    have_goal_=true; 
+    have_goal_= true;   // Questo booleano viene usato per la callback del subgoal
+    goal = true;        // Questo invece per la timer callback
     std::cout << "[SpacialHorizon] Goal set!" << std::endl;   
     //ROS_ERROR("[SpacialHorizon] GOAL CALLBACK CALLED");      
 }
 
 void SpacialHorizon::timerCallback(const ros::TimerEvent& event) {
-    if (state == "AMCL_RECEIVED" && have_goal_) {    // Se entrambe le callback sono state chiamate (amcl + goal) allora crea globalPlan
+    if (state == "AMCL_RECEIVED" && goal) {    // Se entrambe le callback sono state chiamate (amcl + goal) allora crea globalPlan
         ROS_ERROR("[SpacialHorizon] AMCL AND GOAL RECEIVED");
-        state = "READY";
+        state = "RESET";    // Lo stato viene resettato
         getGlobalPath_MoveBase();
+        goal = false;
 
         // vis goal
         std::vector<Eigen::Vector2d> point_set;
         point_set.push_back(end_pos_);
         visualizePoints(point_set,0.5,Eigen::Vector4d(1, 1, 1, 1.0),vis_goal_pub_);
-        execute_goal_timer.stop();
+        //execute_goal_timer.stop();
     }
-    else if (state == "AMCL_RECEIVED" && !have_goal_){
-        ROS_ERROR("[SpacialHorizon] AMCL RECEIVED, GOAL NOT YET");
+    else if (state == "AMCL_RECEIVED" && !goal){
+        //ROS_ERROR("[SpacialHorizon] AMCL RECEIVED, GOAL NOT YET");
     }
-    else if (state != "AMCL_RECEIVED" && have_goal_) {
-        ROS_ERROR("[SpacialHorizon] GOAL RECEIVED, AMCL NOT YET");
+    else if (state != "AMCL_RECEIVED" && goal) {
+        //ROS_ERROR("[SpacialHorizon] GOAL RECEIVED, AMCL NOT YET");
     }
 
 }
