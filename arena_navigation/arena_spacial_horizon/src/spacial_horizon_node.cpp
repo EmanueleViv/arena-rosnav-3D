@@ -228,10 +228,10 @@ void SpacialHorizon::updateSubgoalDRLCallback(const ros::TimerEvent &e){
 void SpacialHorizon::getGlobalPath_MoveBase(){
 	/* get global path from move_base */
 	ros::NodeHandle nh;
-	std::string service_name = "/move_base/NavfnROS/make_plan";
+	std::string service_name = "/move_base/GlobalPlanner/make_plan";
     ROS_ERROR("[SpacialHorizon] Ask movebase for globalplan");
 	while (!ros::service::waitForService(service_name, ros::Duration(3.0))) {
-		ROS_INFO("[SpacialHorizon - GET_PATH] Waiting for service /move_base/NavfnROS/make_plan to become available");
+		ROS_INFO("[SpacialHorizon - GET_PATH] Waiting for service /move_base/GlobalPlanner/make_plan to become available");
 	}
 
 	ros::ServiceClient serviceClient = nh.serviceClient<nav_msgs::GetPlan>(service_name, true);
