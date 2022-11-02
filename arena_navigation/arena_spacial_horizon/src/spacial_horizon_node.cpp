@@ -11,6 +11,7 @@ void SpacialHorizon::init(ros::NodeHandle &nh)
 {   
     have_goal_ = false;
     have_odom_ = false;
+    goal = false;
 
     
     ROS_ERROR("[SpacialHorizon] Inizialiting..");
@@ -47,7 +48,7 @@ void SpacialHorizon::init(ros::NodeHandle &nh)
     initialPose_sub_ = public_nh.subscribe("initialpose", 0, &SpacialHorizon::handle_initial_pose, this);
 
     subgoal_DRL_pub_  = public_nh.advertise<geometry_msgs::PoseStamped>("subgoal",10);
-    globalPlan_DRL_pub_  = public_nh.advertise<nav_msgs::Path>("globalPlan",10);
+    globalPlan_DRL_pub_  = public_nh.advertise<nav_msgs::Path>("globalPlan",10, true);
 
     /* visualization */
     vis_global_path_pub_ = public_nh.advertise<nav_msgs::Path>("vis_global_path", 10, true);
@@ -119,16 +120,17 @@ void SpacialHorizon::goalCallback(const geometry_msgs::PoseStampedPtr& msg){    
     end_vel_=Eigen::Vector2d::Zero();
     have_goal_= true;   // Questo booleano viene usato per la callback del subgoal
     goal = true;        // Questo invece per la timer callback
-    std::cout << "[SpacialHorizon] Goal set!" << std::endl;   
-    //ROS_ERROR("[SpacialHorizon] GOAL CALLBACK CALLED");      
+    //std::cout << "[SpacialHorizon] Goal set!" << std::endl;   
+    ROS_ERROR("[SpacialHorizon] GOAL CALLBACK CALLED");      
 }
 
 void SpacialHorizon::timerCallback(const ros::TimerEvent& event) {
     if (state == "AMCL_RECEIVED" && goal) {    // Se entrambe le callback sono state chiamate (amcl + goal) allora crea globalPlan
         ROS_ERROR("[SpacialHorizon] AMCL AND GOAL RECEIVED");
         state = "RESET";    // Lo stato viene resettato
-        getGlobalPath_MoveBase();
         goal = false;
+        getGlobalPath_MoveBase();
+        
 
         // vis goal
         std::vector<Eigen::Vector2d> point_set;

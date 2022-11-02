@@ -3,7 +3,7 @@
 import rospy
 from observations.msg import Observation
 from geometry_msgs.msg import PoseStamped, Twist, Vector3, PoseWithCovarianceStamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import LaserScan
 # viz
 from visualization_msgs.msg import Marker, MarkerArray
@@ -20,6 +20,8 @@ class NN_tb3():
         print("[play_agent]: in init")
         self.sub_obs = rospy.Subscriber('/observation', Observation, self.cbObservation)
         self.pub_twist = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self.global_plan = rospy.Subscriber('/globalPlan', Path, self.cbGlobalPlan)
+        self.global_plan_published = False
 
     def goalReached(self):
         # how far ?
@@ -38,9 +40,14 @@ class NN_tb3():
         twist = Twist()
         # print(twist)
         self.pub_twist.publish(twist)
-            
+    
+    def cbGlobalPlan(self, msg):
+        self.global_plan_published = True
+    
     def cbObservation(self, msg):
         # print("[Play_agent]: in cbObservation")
+        if (not self.global_plan_published): 
+            return
         if not self.goalReached():
             # NUM_ACTIONS = 5
             NUM_ACTIONS = 7
